@@ -178,9 +178,9 @@ class YSNotifier (dbus.service.Object):
 
   @dbus.service.signal (dbus_interface="org.freedesktop.Notifications")
   def NotificationClosed (self, id, reason):
-    #try:
+    try:
       del(self.notifications[int(id)])
-    #finally:
+    finally:
       if self.argv.verbose:
         print ("Removing notification %s, reason: %s" % (id, reason))
 
