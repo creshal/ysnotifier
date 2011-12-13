@@ -33,6 +33,7 @@
 
 import dbus, dbus.service, argparse, gobject, os.path
 from dbus.mainloop.glib import DBusGMainLoop
+from collections import OrderedDict as odict
 
 argp = argparse.ArgumentParser (description="Minimal notification handler implementation. Works both as GTK ui client and cli listener.")
 argp.add_argument ("-q", "--quiet", action="store_true", help="Disable printing to stdout [Default: enabled]")
@@ -70,14 +71,14 @@ class GtkNotification (gtk.Window):
     self.evbox.connect ("button-release-event", self.do_destroy)
     self.connect ("configure-event", self.automove)
     self.set_border_width (4)
-    self.update (app_name, id, icon, summary, body, actions, hints)
+    self.update (app_name, id, icon, summary, body, actions, hints, "initial")
 
   def do_destroy (self, reason, unused=None):
     self.notifier.NotificationClosed (self.id, reason if type(reason) != gtk.EventBox else "User request")
     gobject.source_remove (self.timeout)
     self.destroy()
 
-  def update (self, app_name, id, icon, summary, body, actions, hints):
+  def update (self, app_name, id, icon, summary, body, actions, hints, updatetype="update"):
     gobject.source_remove (self.timeout)
     self.timeout = gobject.timeout_add (self.notifier.timeout, self.do_destroy, "Timeout")
     self.evbox.remove (self.hbox)
@@ -110,20 +111,22 @@ class GtkNotification (gtk.Window):
     self.evbox.add (self.hbox)
     self.modify_bg (gtk.STATE_NORMAL, self.get_style().bg[gtk.STATE_SELECTED])
     self.show_all()
-    self.needsmove = True
+    self.needsmove = updatetype
 
   def automove (self, widget=None, event=None, force=False):
     """ Move window to the user-supplied position. Thanks, GTK, for not making it any easier."""
     if not self.needsmove and type(force) is bool:
       return
-    self.needsmove = False
     self.set_gravity(gtk.gdk.GRAVITY_SOUTH_EAST)
     width, height = self.get_size()
     #I dare you to find an example of worse abuse of inline if
+    x, y = self.get_position()
     x = 0 if self.argv.x == "left" else gtk.gdk.screen_width() - width if self.argv.x == "right" else self.argv.x
-    y = 0 if self.argv.y == "top" else gtk.gdk.screen_height() - height if self.argv.y == "bottom" else self.argv.y
-    y += height * (force if type(force) is int else (len(self.notifier.notifications)-1))
+    if self.needsmove is not "update": #recalc height only when not updating content alone
+      y = 0 if self.argv.y == "top" else gtk.gdk.screen_height() - height if self.argv.y == "bottom" else self.argv.y
+      y += height * (force if type(force) is int else (len(self.notifier.notifications)-1))
     self.move(int(x), int(y))
+    self.needsmove = ""
 
 
 
@@ -133,7 +136,7 @@ class YSNotifier (dbus.service.Object):
   def __init__ (self, argv):
     bus_name = dbus.service.BusName ("org.freedesktop.Notifications", bus=dbus.SessionBus())
     self.max_id = 1 #spec doesn't think 0 is a valid id
-    self.notifications = {}
+    self.notifications = odict()
     self.argv = argv
     self.timeout = 10000
     dbus.service.Object.__init__(self, bus_name, "/org/freedesktop/Notifications")
@@ -178,10 +181,7 @@ class YSNotifier (dbus.service.Object):
   @dbus.service.signal (dbus_interface="org.freedesktop.Notifications")
   def NotificationClosed (self, id, reason):
     del(self.notifications[int(id)])
-    newpos = 0
-    for note in self.notifications:
-      self.notifications[note].automove(force=newpos)
-      newpos+=1
+    [self.notifications[note[0]].automove(force=note[1]) for note in zip(self.notifications,range(len(self.notifications)))]
     if self.argv.verbose:
       print ("Removing notification %s, reason: %s" % (id, reason))
 
