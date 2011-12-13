@@ -52,37 +52,37 @@ if ARGV.gtk:
 
 
 
-class GtkNotification ():
+class GtkNotification (gtk.Window):
   def __init__ (self, daemon, app_name, id, icon, summary, body, actions, hints, argv):
+    gtk.Window.__init__(self)
     self.notifier = daemon
     self.argv = argv
     self.id = id
     self.timeout = gobject.timeout_add (daemon.timeout, self.do_destroy, "Timeout")
-    self.window = gtk.Window ()
     #why write readable code when you can have short code?
     for attr in ["resizable","decorated"]:
-      getattr(self.window,"set_"+attr)(False)
+      getattr(self,"set_"+attr)(False)
     for attr in ["keep_above","skip_pager_hint","skip_taskbar_hint"]:
-      getattr(self.window,"set_"+attr)(True)
-    self.window.stick()
-    self.window.evbox = gtk.EventBox()
-    self.window.hbox = gtk.HBox()
-    self.window.evbox.add (self.window.hbox)
-    self.window.add (self.window.evbox)
-    self.window.evbox.connect ("button-release-event", self.do_destroy)
-    self.window.connect ("configure-event", self.move)
-    self.window.set_border_width (4)
+      getattr(self,"set_"+attr)(True)
+    self.stick()
+    self.evbox = gtk.EventBox()
+    self.hbox = gtk.HBox()
+    self.evbox.add (self.hbox)
+    self.add (self.evbox)
+    self.evbox.connect ("button-release-event", self.do_destroy)
+    self.connect ("configure-event", self.automove)
+    self.set_border_width (4)
     self.update (app_name, id, icon, summary, body, actions, hints)
 
   def do_destroy (self, reason, unused=None):
     self.notifier.NotificationClosed (self.id, reason if type(reason) != gtk.EventBox else "User request")
     gobject.source_remove (self.timeout)
-    self.window.destroy()
+    self.destroy()
 
   def update (self, app_name, id, icon, summary, body, actions, hints):
     gobject.source_remove (self.timeout)
     self.timeout = gobject.timeout_add (self.notifier.timeout, self.do_destroy, "Timeout")
-    self.window.evbox.remove (self.window.hbox)
+    self.evbox.remove (self.hbox)
     (w, h) = gtk.icon_size_lookup (icon_size)
     path = None
     if os.path.isfile(icon):
@@ -102,29 +102,29 @@ class GtkNotification ():
       icon = gtk.image_new_from_stock(gtk.STOCK_DIALOG_INFO,icon_size)
     title = gtk.Label ('<span size="xx-large">%s</span>' % summary)
     body = gtk.Label (body)
-    self.window.hbox = gtk.HBox(False)
-    self.window.hbox.add (icon)
+    self.hbox = gtk.HBox(False)
+    self.hbox.add (icon)
     vbox = gtk.VBox(True)
     for label in [title, body]:
       vbox.pack_start (label)
       label.set_use_markup (True)
-    self.window.hbox.pack_start (vbox, padding=8)
-    self.window.evbox.add (self.window.hbox)
-    self.window.modify_bg (gtk.STATE_NORMAL, self.window.get_style().bg[gtk.STATE_SELECTED])
-    self.window.show_all()
+    self.hbox.pack_start (vbox, padding=8)
+    self.evbox.add (self.hbox)
+    self.modify_bg (gtk.STATE_NORMAL, self.get_style().bg[gtk.STATE_SELECTED])
+    self.show_all()
     self.needsmove = True
 
-  def move (self, widget, event):
+  def automove (self, widget, event):
     """ Move window to the user-supplied position. Thanks, GTK, for not making it any easier."""
     if not self.needsmove:
       return
     self.needsmove = False
-    self.window.set_gravity(gtk.gdk.GRAVITY_SOUTH_EAST)
-    width, height = self.window.get_size()
+    self.set_gravity(gtk.gdk.GRAVITY_SOUTH_EAST)
+    width, height = self.get_size()
     #I dare you to find an example of worse abuse of inline if
     x = 0 if self.argv.x == "left" else gtk.gdk.screen_width() - width if self.argv.x == "right" else self.argv.x
     y = 0 if self.argv.y == "top" else gtk.gdk.screen_height() - height if self.argv.y == "bottom" else self.argv.y
-    self.window.move(int(x), int(y))
+    self.move(int(x), int(y))
 
 
 
