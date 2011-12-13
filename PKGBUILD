@@ -9,9 +9,9 @@ depends=('dbus-python' 'pygtk' 'python2>=2.7')
 makedepends=()
 provides=("notification-daemon")
 conflicts=("notification-daemon")
-source=("http://dev.yaki-syndicate.de/git/cgit.cgi/stuff/tree/ysnotifier")
+source=("http://dev.yaki-syndicate.de/git/cgit.cgi/ysnotifier/plain/ysnotifier?id=${pkgver}")
 md5sums=('79bee329bed768c30b4566328e891c1d')
 build() {
-  install -Dm755 ${srcdir}/$pkgname $pkgdir/usr/bin/$pkgname
+  install -Dm755 "${srcdir}/$pkgname?id=${pkgver}" $pkgdir/usr/bin/$pkgname
 }
 
