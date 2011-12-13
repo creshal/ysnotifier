@@ -1,0 +1,195 @@
+#! /usr/bin/python2
+# vim: set fileencoding=utf-8
+#
+# Minimal GTK2 based daemon/consumer for FDO compliant desktop notifications
+#
+# Spec: http://developer.gnome.org/notification-spec/
+#
+# To do:
+# - Support actions and more hints
+#
+# © Samuel Vincent Creshal <samuel@creshal.de> 2011
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# Redistributions of source code must retain the above copyright notice, this
+# list of conditions and the following disclaimer.
+# Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+import dbus, dbus.service, argparse
+from dbus.mainloop.glib import DBusGMainLoop
+import gobject
+import os.path
+
+argp = argparse.ArgumentParser (description="Minimal notification handler implementation. Works both as GTK ui client and cli listener.")
+argp.add_argument ("-q", "--quiet", action="store_true", help="Disable printing to stdout [Default: enabled]")
+argp.add_argument ("-g", "--gtk", default=True, help="Enable/disable GTK UI [Default: True]")
+argp.add_argument ("-v", "--verbose", action="store_true", help="Debugging mode [default: not active]")
+argp.add_argument ("-t", "--timeout", default=5000, help="Timeout for pop ups [default: 5000]")
+argp.add_argument ("-x", default="right", help="X position for the popups. Allowed values: unsigned integer, left or right [default: right]")
+argp.add_argument ("-y", default="top", help="Y position. Allowed: unsigned integer, top or bottom [default: top]")
+ARGV = argp.parse_args()
+
+if ARGV.gtk:
+  import gtk
+  icon_theme = gtk.icon_theme_get_default()
+  icon_size = gtk.icon_size_register("notification", 64,64)
+
+
+
+class GtkNotification ():
+  def __init__ (self, daemon, app_name, id, icon, summary, body, actions, hints, argv):
+    self.notifier = daemon
+    self.argv = argv
+    self.id = id
+    self.timeout = gobject.timeout_add (daemon.timeout, self.do_destroy, "Timeout")
+    self.window = gtk.Window ()
+    self.window.set_resizable (False)
+    self.window.set_decorated (False)
+    self.window.set_keep_above (True)
+    self.window.stick()
+    self.window.hbox = gtk.HBox()
+    self.window.add (self.window.hbox)
+    self.window.connect ("configure-event", self.move)
+    self.window.set_border_width (4)
+    self.window.set_accept_focus (False)
+    self.window.set_skip_pager_hint (True)
+    self.window.set_skip_taskbar_hint (True)
+    self.update (app_name, id, icon, summary, body, actions, hints)
+
+  def do_destroy (self, reason):
+    self.notifier.NotificationClosed (self.id, reason)
+    self.window.destroy()
+
+  def update (self, app_name, id, icon, summary, body, actions, hints):
+    gobject.source_remove (self.timeout)
+    self.timeout = gobject.timeout_add (self.notifier.timeout, self.do_destroy, "Timeout")
+    self.window.remove (self.window.hbox)
+    (w, h) = gtk.icon_size_lookup (icon_size)
+    path = None
+    if os.path.isfile(icon):
+      path = icon
+    elif icon_theme.has_icon (icon):
+      info = icon_theme.lookup_icon (icon, w, 0)
+      path = info.get_filename()
+      info.free()
+    if path:
+      pixbuf = gtk.gdk.pixbuf_new_from_file (path)
+      if pixbuf.get_width() > w or pixbuf.get_height() > h:
+        pixbuf = pixbuf.scale_simple (w, h, gtk.gdk.INTERP_HYPER)
+      icon = gtk.image_new_from_pixbuf (pixbuf)
+      if pixbuf.get_width() < w or pixbuf.get_height() < h:
+        icon.set_size_request (w, h)
+    else:
+      icon = gtk.image_new_from_stock(gtk.STOCK_DIALOG_INFO,icon_size)
+    title = gtk.Label ('<span size="xx-large">%s</span>' % summary)
+    body = gtk.Label (body)
+    self.window.hbox = gtk.HBox(False)
+    self.window.hbox.add (icon)
+    vbox = gtk.VBox(True)
+    for label in [title, body]:
+      vbox.pack_start (label)
+      label.set_use_markup (True)
+    self.window.hbox.pack_start (vbox, padding=8)
+    self.window.add (self.window.hbox)
+    self.window.modify_bg (gtk.STATE_NORMAL, self.window.get_style().bg[gtk.STATE_SELECTED])
+    self.window.show_all()
+    self.needsmove = True
+
+  def move (self, widget, event):
+    """ Move window to the user-supplied position. Thanks, GTK, for not making it any easier."""
+    if not self.needsmove:
+      return
+    self.needsmove = False
+    self.window.set_gravity(gtk.gdk.GRAVITY_SOUTH_EAST)
+    width, height = self.window.get_size()
+    #I dare you to find an example of worse abuse of inline if
+    x = 0 if self.argv.x == "left" else gtk.gdk.screen_width() - width if self.argv.x == "right" else self.argv.x
+    y = 0 if self.argv.y == "top" else gtk.gdk.screen_height() - height if self.argv.y == "bottom" else self.argv.y
+    self.window.move(int(x), int(y))
+
+
+
+class YSNotifier (dbus.service.Object):
+  """Daemon component. Listens for notifications over DBus."""
+
+  def __init__ (self, argv):
+    bus_name = dbus.service.BusName ("org.freedesktop.Notifications",
+     bus=dbus.SessionBus())
+    self.max_id = 1 #spec doesn't think 0 is a valid id
+    self.notifications = {}
+    self.argv = argv
+    self.timeout = 10000
+    dbus.service.Object.__init__(self, bus_name,
+     "/org/freedesktop/Notifications")
+
+  @dbus.service.method ("org.freedesktop.Notifications")
+  def Notify (self, app_name, id, icon, summary, body, actions, hints, timeout):
+    argv = self.argv
+    id = int(id)
+    summary = summary[:40] #truncate summary as per spec
+    if argv.verbose:
+      print ("|".join ([app_name, str(id), icon, summary, body, " ".join(actions), " ".join(hints), str(timeout)]))
+    try:
+      #update notification if requested and existing
+      assert (id != 0)
+      self.notifications[id].update (app_name, id, icon, summary, body, actions, hints)
+    except:
+      id = self.max_id
+      self.max_id +=1
+      if self.argv.gtk == True:
+        self.notifications[id] = GtkNotification (self, app_name, id, icon, summary, body, actions, hints, argv)
+      elif not argv.quiet:
+        print ("[%s]: %s" % (app_name, body if body else summary))
+    return dbus.UInt32(id)
+
+
+  @dbus.service.method ("org.freedesktop.Notifications")
+  def GetCapabilities (self):
+    return dbus.Array (["body","body-markup","icon-static"], signature="as")
+
+  @dbus.service.method ("org.freedesktop.Notifications")
+  def CloseNotification (self, id):
+    try:
+      self.notifications[id].do_destroy ("client request")
+    finally:
+      return
+
+  @dbus.service.method ("org.freedesktop.Notifications", out_signature="ssss")
+  def GetServerInformation (self):
+    #FIXME: Not sure if this really works the way it should.
+    return ("YSNotifier", "The Yaki Syndicate", "0.2", "1.2")
+
+  @dbus.service.signal (dbus_interface="org.freedesktop.Notifications")
+  def NotificationClosed (self, id, reason):
+    try:
+      del(self.notifications[int(id)])
+    finally:
+      if self.argv.verbose:
+        print ("Removing notification %s, reason: %s" % (id, reason))
+
+
+
+DBusGMainLoop (set_as_default=True)
+ysnotifier = YSNotifier(ARGV)
+
+if ARGV.gtk:
+  gtk.main()
+else:
+  gobject.MainLoop().run()
+
