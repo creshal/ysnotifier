@@ -177,7 +177,7 @@ class YSNotifier (dbus.service.Object):
 
   @dbus.service.method ("org.freedesktop.Notifications", out_signature="ssss")
   def GetServerInformation (self):
-    return ("YSNotifier", "The Yaki Syndicate", "0.2", "1.2") #FIXME: Not sure if this really works the way it should.
+    return ("YSNotifier", "The Yaki Syndicate", "0.3", "1.2") #FIXME: Not sure if this really works the way it should.
 
   @dbus.service.signal (dbus_interface="org.freedesktop.Notifications")
   def NotificationClosed (self, id, reason):
