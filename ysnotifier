@@ -6,7 +6,10 @@
 # Spec: http://developer.gnome.org/notification-spec/
 #
 # To do:
-# - Support actions and more hints
+# - Support actions and more hints (esp. image_data [sic!] for python-libnotify)
+# - Use the categories list to map some default icons
+# - Don't display more than n notifications at once (1/4~1/3 of screen height?), kick old ones
+# - configurable icon size (trivial, but too tired atm)
 #
 # © Samuel Vincent Creshal <samuel@creshal.de> 2011
 #
@@ -148,8 +151,7 @@ class YSNotifier (dbus.service.Object):
     summary = summary[:40] #truncate summary as per spec
     if argv.verbose:
       print ("|".join ([app_name, str(id), icon, summary, body, " ".join(actions), " ".join(hints), str(timeout)]))
-    try:
-      #update notification if requested and existing
+    try: #update notification if requested and existing
       assert (id != 0)
       self.notifications[id].update (app_name, id, icon, summary, body, actions, hints)
     except:
@@ -175,8 +177,7 @@ class YSNotifier (dbus.service.Object):
 
   @dbus.service.method ("org.freedesktop.Notifications", out_signature="ssss")
   def GetServerInformation (self):
-    #FIXME: Not sure if this really works the way it should.
-    return ("YSNotifier", "The Yaki Syndicate", "0.2", "1.2")
+    return ("YSNotifier", "The Yaki Syndicate", "0.2", "1.2") #FIXME: Not sure if this really works the way it should.
 
   @dbus.service.signal (dbus_interface="org.freedesktop.Notifications")
   def NotificationClosed (self, id, reason):
