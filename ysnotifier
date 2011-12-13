@@ -31,10 +31,8 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-import dbus, dbus.service, argparse
+import dbus, dbus.service, argparse, gobject, os.path
 from dbus.mainloop.glib import DBusGMainLoop
-import gobject
-import os.path
 
 argp = argparse.ArgumentParser (description="Minimal notification handler implementation. Works both as GTK ui client and cli listener.")
 argp.add_argument ("-q", "--quiet", action="store_true", help="Disable printing to stdout [Default: enabled]")
@@ -114,9 +112,9 @@ class GtkNotification (gtk.Window):
     self.show_all()
     self.needsmove = True
 
-  def automove (self, widget, event):
+  def automove (self, widget=None, event=None, force=False):
     """ Move window to the user-supplied position. Thanks, GTK, for not making it any easier."""
-    if not self.needsmove:
+    if not self.needsmove and not force:
       return
     self.needsmove = False
     self.set_gravity(gtk.gdk.GRAVITY_SOUTH_EAST)
@@ -124,6 +122,7 @@ class GtkNotification (gtk.Window):
     #I dare you to find an example of worse abuse of inline if
     x = 0 if self.argv.x == "left" else gtk.gdk.screen_width() - width if self.argv.x == "right" else self.argv.x
     y = 0 if self.argv.y == "top" else gtk.gdk.screen_height() - height if self.argv.y == "bottom" else self.argv.y
+    y += height * (len(self.notifier.notifications)-1)
     self.move(int(x), int(y))
 
 
@@ -180,6 +179,7 @@ class YSNotifier (dbus.service.Object):
   def NotificationClosed (self, id, reason):
     try:
       del(self.notifications[int(id)])
+      [self.notifications[x].automove(force=True) for x in self.notifications]
     finally:
       if self.argv.verbose:
         print ("Removing notification %s, reason: %s" % (id, reason))
