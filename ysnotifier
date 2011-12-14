@@ -39,12 +39,12 @@ from dbus.mainloop.glib import DBusGMainLoop
 from collections import OrderedDict as odict
 
 argp = argparse.ArgumentParser (description="Minimal notification handler implementation. Works both as GTK ui client and cli listener.")
-argp.add_argument ("-q", "--quiet", action="store_true", help="Disable printing to stdout [Default: enabled]", type=bool)
-argp.add_argument ("-g", "--gtk", default=True, help="Enable/disable GTK UI [Default: True]", type=bool)
-argp.add_argument ("-v", "--verbose", action="store_true", help="Debugging mode [default: not active]", type=bool)
-argp.add_argument ("-t", "--timeout", default=5000, help="Timeout for pop ups [default: 5000]", type=int)
-argp.add_argument ("-x", default="right", help="X position for the popups. Allowed values: unsigned integer, left or right [default: right]", type=int)
-argp.add_argument ("-y", default="top", help="Y position. Allowed: unsigned integer, top or bottom [default: top]", type=int)
+argp.add_argument ("-q", "--quiet", action="store_true", help="Disable printing to stdout [Default: enabled]")
+argp.add_argument ("-g", "--gtk", default=True, help="Enable/disable GTK UI [Default: True]")
+argp.add_argument ("-v", "--verbose", action="store_true", help="Debugging mode [default: not active]")
+argp.add_argument ("-t", "--timeout", default=5000, help="Timeout for pop ups [default: 5000]")
+argp.add_argument ("-x", default="right", help="X position for the popups. Allowed values: unsigned integer, left or right [default: right]")
+argp.add_argument ("-y", default="top", help="Y position. Allowed: unsigned integer, top or bottom [default: top]")
 ARGV = argp.parse_args()
 
 if ARGV.gtk:
@@ -124,11 +124,11 @@ class GtkNotification (gtk.Window):
     width, height = self.get_size()
     #I dare you to find an example of worse abuse of inline if
     x, y = self.get_position()
-    x = 0 if self.argv.x == "left" else gtk.gdk.screen_width() - width if self.argv.x == "right" else self.argv.x
+    x = 0 if self.argv.x == "left" else gtk.gdk.screen_width() - width if self.argv.x == "right" else int(self.argv.x)
     if self.needsmove is not "update": #recalc height only when not updating content alone
-      y = 0 if self.argv.y == "top" else gtk.gdk.screen_height() - height if self.argv.y == "bottom" else self.argv.y
+      y = 0 if self.argv.y == "top" else gtk.gdk.screen_height() - height if self.argv.y == "bottom" else int(self.argv.y)
       y += height * (force if type(force) is int else (len(self.notifier.notifications)-1))
-    self.move(int(x), int(y))
+    self.move(x, y)
     self.needsmove = ""
 
 
