@@ -166,7 +166,7 @@ class YSNotifier (dbus.service.Object):
 
   @dbus.service.method ("org.freedesktop.Notifications")
   def GetCapabilities (self):
-    return dbus.Array (["body","body-markup","icon-static"], signature="as")
+    return dbus.Array (["body","body-markup","icon-static"])
 
   @dbus.service.method ("org.freedesktop.Notifications")
   def CloseNotification (self, id):
