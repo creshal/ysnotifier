@@ -45,6 +45,7 @@ argp.add_argument ("-x", default="right", help="X position for the popups. Allow
 argp.add_argument ("-y", default="top", help="Y position. Allowed: unsigned integer, top or bottom [default: top]")
 argp.add_argument ("-s", default=64, help="Icon size in pixel [default: 64]", type=int)
 argp.add_argument ("-n", default=5, help="Maximum number of active notifications [default: 5]", type=int)
+argp.add_argument ("-d", "--force-tile-down", action="store_true", help="Force notifications to appear below each other [Default: tile down when y<256]")
 ARGV = argp.parse_args()
 
 if ARGV.gtk:
@@ -132,7 +133,10 @@ class GtkNotification (gtk.Window):
     x = 0 if self.argv.x == "left" else gtk.gdk.screen_width() - width if self.argv.x == "right" else int(self.argv.x)
     if self.needsmove is not "update": #recalc height only when not updating content alone
       y = 0 if self.argv.y == "top" else gtk.gdk.screen_height() - height if self.argv.y == "bottom" else int(self.argv.y)
-      y += height * (force if type(force) is int else (len(self.notifier.notifications)-1))
+      if self.argv.y < 256 or self.argv.force_tile_down:
+        y += height * (force if type(force) is int else (len(self.notifier.notifications)-1))
+      else:
+        y -= height * (force if type(force) is int else (len(self.notifier.notifications)-1))
     self.move(x, y)
     self.needsmove = ""
 
