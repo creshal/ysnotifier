@@ -5,8 +5,28 @@
 #
 # Spec: http://developer.gnome.org/notification-spec/
 #
-# To do:
-# - Fix actions
+# Test suite compliance:
+# test-action-icons:       0% Action icons not supported
+# test-basic:             67% No forced line breaks for overly long summaries
+# test-default-action:   100% OK
+# test-error:            100% OK (since the test doesn't do anything but showing a notification)
+# test-image:             50% stock OK, URI not supported
+# test-markup:           100% OK
+# test-multiple-actions: 100% OK
+# test-persistence:        0% Persistence not supported
+# test-removal:          100% OK
+# test-replace:          100% OK
+# test-replace-widget:   100% OK
+# test-resident:           0% Persistence not supported
+# test-rtl:              100% OK
+# test-server-info:      100% OK
+# test-size-change:        0% other notifications not adjusted for new size
+# test-transient:       (100%) Persistence not supported, therefore automatically transient
+# test-urgency:            0% Urgency not supported
+# test-xy                  0% Positions are always fixed
+# test-xy-actions:        50% Actions supported, positioning not
+# text-xy-stress:         50% Stress test doesn't fuck up anything, positions still fixed
+# total:                  61%
 #
 # © Samuel Vincent Creshal <samuel@creshal.de> 2011
 #
