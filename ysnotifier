@@ -61,7 +61,7 @@ class GtkNotification (gtk.Window):
     self.notifier = daemon
     self.argv = argv
     self.id = id
-    self.timeout = gobject.timeout_add (daemon.timeout, self.do_destroy, "Timeout")
+    self.timeout = gobject.timeout_add (daemon.timeout, self.do_destroy, 1)
     #why write readable code when you can have short code?
     for attr in ["resizable","decorated"]:
       getattr(self,"set_"+attr)(False)
@@ -78,13 +78,13 @@ class GtkNotification (gtk.Window):
     self.update (app_name, id, icon, summary, body, actions, hints, "initial")
 
   def do_destroy (self, reason, unused=None):
-    self.notifier.NotificationClosed (self.id, reason if type(reason) != gtk.EventBox else "User request")
+    self.notifier.NotificationClosed (self.id, reason if type(reason) != gtk.EventBox else 2)
     gobject.source_remove (self.timeout)
     self.destroy()
 
   def update (self, app_name, id, icon, summary, body, actions, hints, updatetype="update"):
     gobject.source_remove (self.timeout)
-    self.timeout = gobject.timeout_add (self.notifier.timeout, self.do_destroy, "Timeout")
+    self.timeout = gobject.timeout_add (self.notifier.timeout, self.do_destroy, 1)
     self.evbox.remove (self.hbox)
     (w, h) = gtk.icon_size_lookup (icon_size)
     path = icon if isfile(icon) else hints["image-path"] if "image-path" in hints else hints["image_path"] if "image_path" in hints else None
@@ -158,7 +158,7 @@ class YSNotifier (dbus.service.Object):
     for note in self.notifications.copy():
       if len(self.notifications) < self.argv.n:
         break
-      self.notifications[note].do_destroy ("Notification limit reached")
+      self.notifications[note].do_destroy (4)
     id = int(id)
     summary = summary[:40] #truncate summary as per spec
     if self.argv.verbose:
@@ -183,7 +183,7 @@ class YSNotifier (dbus.service.Object):
   @dbus.service.method ("org.freedesktop.Notifications")
   def CloseNotification (self, id):
     try:
-      self.notifications[id].do_destroy ("client request")
+      self.notifications[id].do_destroy (3)
     finally:
       return
 
@@ -191,12 +191,12 @@ class YSNotifier (dbus.service.Object):
   def GetServerInformation (self):
     return ("YSNotifier", "The Yaki Syndicate", "0.4", "1.2")
 
-  @dbus.service.signal (dbus_interface="org.freedesktop.Notifications")
+  @dbus.service.signal (dbus_interface="org.freedesktop.Notifications", signature="uu")
   def NotificationClosed (self, id, reason):
     del(self.notifications[int(id)])
     [self.notifications[note[0]].automove(force=note[1]) for note in zip(self.notifications,range(len(self.notifications)))]
     if self.argv.verbose:
-      print ("Removing notification %s, reason: %s" % (id, reason))
+      print ("Removing notification %s, reason: %s" % (id, ["Expired","User request","Client request","Undefined/internal"][reason]))
 
   @dbus.service.signal (dbus_interface="org.freedesktop.Notifications", signature="us")
   def ActionInvoked (self, id, action):
