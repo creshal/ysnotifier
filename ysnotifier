@@ -113,7 +113,7 @@ class GtkNotification (gtk.Window):
     for i in range(len(actions))[::2]:
       button = gtk.Button (actions[i+1])
       button.connect ("clicked", self.action, actions[i])
-      #self.hbox.pack_start(button)
+      self.hbox.pack_start(button)
     self.evbox.add (self.hbox)
     self.modify_bg (gtk.STATE_NORMAL, self.get_style().bg[gtk.STATE_SELECTED])
     self.show_all()
@@ -133,7 +133,7 @@ class GtkNotification (gtk.Window):
     x = 0 if self.argv.x == "left" else gtk.gdk.screen_width() - width if self.argv.x == "right" else int(self.argv.x)
     if self.needsmove is not "update": #recalc height only when not updating content alone
       y = 0 if self.argv.y == "top" else gtk.gdk.screen_height() - height if self.argv.y == "bottom" else int(self.argv.y)
-      if self.argv.y < 256 or self.argv.force_tile_down:
+      if y < 256 or self.argv.force_tile_down:
         y += height * (force if type(force) is int else (len(self.notifier.notifications)-1))
       else:
         y -= height * (force if type(force) is int else (len(self.notifier.notifications)-1))
@@ -178,7 +178,7 @@ class YSNotifier (dbus.service.Object):
 
   @dbus.service.method ("org.freedesktop.Notifications")
   def GetCapabilities (self):
-    return dbus.Array (["body","body-markup","icon-static","actions"])
+    return dbus.Array (["body","body-markup","icon-static","actions","body-hyperlinks"])
 
   @dbus.service.method ("org.freedesktop.Notifications")
   def CloseNotification (self, id):
@@ -189,7 +189,7 @@ class YSNotifier (dbus.service.Object):
 
   @dbus.service.method ("org.freedesktop.Notifications", out_signature="ssss")
   def GetServerInformation (self):
-    return ("YSNotifier", "The Yaki Syndicate", "0.4", "1.2") #FIXME: Not sure if this really works the way it should.
+    return ("YSNotifier", "The Yaki Syndicate", "0.4", "1.2")
 
   @dbus.service.signal (dbus_interface="org.freedesktop.Notifications")
   def NotificationClosed (self, id, reason):
@@ -198,7 +198,7 @@ class YSNotifier (dbus.service.Object):
     if self.argv.verbose:
       print ("Removing notification %s, reason: %s" % (id, reason))
 
-  @dbus.service.signal (dbus_interface="org.freedesktop.Notifications")
+  @dbus.service.signal (dbus_interface="org.freedesktop.Notifications", signature="us")
   def ActionInvoked (self, id, action):
     if self.argv.verbose:
       print ("Triggering action %s for notification %i" % (action, id))
