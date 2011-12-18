@@ -73,9 +73,8 @@ class GtkNotification (gtk.Window):
     self.evbox.add (self.hbox)
     self.add (self.evbox)
     self.evbox.connect ("button-release-event", self.do_destroy)
-    self.connect ("configure-event", self.automove)
     self.set_border_width (4)
-    self.update (app_name, id, icon, summary, body, actions, hints, "initial")
+    self.update (app_name, id, icon, summary, body, actions, hints, "intial")
 
   def do_destroy (self, reason, unused=None):
     self.notifier.NotificationClosed (self.id, reason if type(reason) != gtk.EventBox else 2)
@@ -164,7 +163,7 @@ class YSNotifier (dbus.service.Object):
     if self.argv.verbose:
       print ("|".join ([app_name, str(id), icon, summary, body, " ".join(actions), " ".join(hints), str(timeout)]))
     try: #update notification if requested and existing
-      assert (id != 0)
+      assert (id > 0)
       self.notifications[id].update (app_name, id, icon, summary, body, actions, hints)
     except:
       id = self.max_id
@@ -173,6 +172,7 @@ class YSNotifier (dbus.service.Object):
         self.notifications[id] = GtkNotification (self, app_name, id, icon, summary, body, actions, hints, self.argv)
       elif not self.argv.quiet:
         print ("[%s]: %s" % (app_name, body if body else summary))
+    [self.notifications[note[0]].automove(force=note[1]) for note in zip(self.notifications,range(len(self.notifications)))]
     return dbus.UInt32(id)
 
 
