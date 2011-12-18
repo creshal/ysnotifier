@@ -74,7 +74,7 @@ class GtkNotification (gtk.Window):
     self.add (self.evbox)
     self.evbox.connect ("button-release-event", self.do_destroy)
     self.set_border_width (4)
-    self.update (app_name, id, icon, summary, body, actions, hints, "intial")
+    self.update (app_name, id, icon, summary, body, actions, hints, "initial")
 
   def do_destroy (self, reason, unused=None):
     self.notifier.NotificationClosed (self.id, reason if type(reason) != gtk.EventBox else 2)
