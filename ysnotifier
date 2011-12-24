@@ -23,9 +23,9 @@
 # test-size-change:        0% other notifications not adjusted for new size
 # test-transient:       (100%) Persistence not supported, therefore automatically transient
 # test-urgency:            0% Urgency not supported
-# test-xy                100% Positions are always fixed
-# test-xy-actions:       100% Actions supported, positioning not
-# text-xy-stress:        100% Stress test doesn't fuck up anything, positions still fixed
+# test-xy                100%
+# test-xy-actions:       100%
+# text-xy-stress:        100%
 # total:                  73%
 #
 # © Samuel Vincent Creshal <samuel@creshal.de> 2011
@@ -60,7 +60,7 @@ argp = argparse.ArgumentParser (description="Minimal notification handler implem
 argp.add_argument ("-q", "--quiet", action="store_true", help="Disable printing to stdout [Default: enabled]")
 argp.add_argument ("-g", "--gtk", default=True, help="Enable/disable GTK UI [Default: True]")
 argp.add_argument ("-v", "--verbose", action="store_true", help="Debugging mode [default: not active]")
-argp.add_argument ("-t", "--timeout", default=5000, help="Timeout for pop ups [default: 5000]")
+argp.add_argument ("-t", "--timeout", default=5000, help="Timeout for pop ups [default: 5000]", type=int)
 argp.add_argument ("-x", default="right", help="X position for the popups. Allowed values: unsigned integer, left or right [default: right]")
 argp.add_argument ("-y", default="top", help="Y position. Allowed: unsigned integer, top or bottom [default: top]")
 argp.add_argument ("-s", default=64, help="Icon size in pixel [default: 64]", type=int)
@@ -78,7 +78,7 @@ if ARGV.gtk:
 class GtkNotification (gtk.Window):
   def __init__ (self, daemon, app_name, id, icon, summary, body, actions, hints, argv):
     gtk.Window.__init__(self)
-    self.y = self.width = self.height = 0
+    self.y = 0
     self.notifier = daemon
     self.argv = argv
     self.id = id
@@ -97,7 +97,6 @@ class GtkNotification (gtk.Window):
     self.evbox.connect ("button-release-event", self.do_destroy)
     self.connect ("configure-event", self.automove)
     self.set_border_width (4)
-    self.set_wmclass (str(id),"ysnotifier")
     self.update (app_name, id, icon, summary, body, actions, hints, "initial")
 
   def do_destroy (self, reason, unused=None):
@@ -132,7 +131,6 @@ class GtkNotification (gtk.Window):
     for label in [title, content]:
       vbox.pack_start (label)
       label.set_use_markup (True)
-    #content.set_line_wrap (True)
     if len (body) > 80: content.set_max_width_chars (80) #the dreaded 80 char limit... it's going to haunt us forever, isn't it?
     self.hbox.pack_start (vbox, padding=8)
     for i in range(len(actions))[::2]:
@@ -164,11 +162,9 @@ class GtkNotification (gtk.Window):
       if iop and precedessor: y = iop (height + precedessor.y)
       elif iop: y = iop (height * max((force if type(force) is int else (len(self.notifier.notifications)-1)) - self.notifier.absolute_notes, 0))
     self.move(x, y)
-    self.y, self.height = (y, height)
+    self.y = y
     self.needsmove = ""
 
-  def __str__(self):
-    return str((self.id, self.title, self.y, self.height))
 
 
 class YSNotifier (dbus.service.Object):
@@ -200,12 +196,10 @@ class YSNotifier (dbus.service.Object):
       id = self.max_id if not id else id
       self.max_id = self.max_id +1 if id <= self.max_id else id+1
       if self.argv.gtk == True:
-        if "x" in hints:
-          self.absolute_notes += 1
+        if "x" in hints: self.absolute_notes += 1
         self.notifications[id] = GtkNotification (self, app_name, id, icon, summary, body, actions, hints, self.argv)
       elif not self.argv.quiet:
         print ("[%s]: %s" % (app_name, body if body else summary))
-    #[self.notifications[note[0]].automove(force=note[1], excluded=id) for note in zip(self.notifications,range(len(self.notifications)))]
     self.reposition_notes (id)
     return dbus.UInt32(id)
 
@@ -223,10 +217,8 @@ class YSNotifier (dbus.service.Object):
 
   @dbus.service.method ("org.freedesktop.Notifications")
   def CloseNotification (self, id):
-    try:
-      self.notifications[id].do_destroy (3)
-    finally:
-      return
+    try: self.notifications[id].do_destroy (3)
+    finally: return
 
   @dbus.service.method ("org.freedesktop.Notifications", out_signature="ssss")
   def GetServerInformation (self):
@@ -234,26 +226,20 @@ class YSNotifier (dbus.service.Object):
 
   @dbus.service.signal (dbus_interface="org.freedesktop.Notifications", signature="uu")
   def NotificationClosed (self, id, reason):
-    if "x" in self.notifications[int(id)].hints:
-      self.absolute_notes -= 1
-    del(self.notifications[int(id)])
-    #[self.notifications[note[0]].automove(force=note[1]) for note in zip(self.notifications,range(len(self.notifications)))]
+    if "x" in self.notifications[id].hints: self.absolute_notes -= 1
+    del(self.notifications[id])
     self.reposition_notes(id)
-    if self.argv.verbose:
-      print ("Removing notification %s, reason: %s" % (id, ["Expired","User request","Client request","Undefined/internal"][reason]))
+    if self.argv.verbose: print ("Removing notification %s, reason: %s" % (id, ["Expired","User request","Client request","Undefined/internal"][reason]))
 
   @dbus.service.signal (dbus_interface="org.freedesktop.Notifications", signature="us")
   def ActionInvoked (self, id, action):
-    if self.argv.verbose:
-      print ("Triggering action %s for notification %i" % (action, id))
+    if self.argv.verbose: print ("Triggering action %s for notification %i" % (action, id))
 
 
 
 DBusGMainLoop (set_as_default=True)
 ysnotifier = YSNotifier(ARGV)
 
-if ARGV.gtk:
-  gtk.main()
-else:
-  gobject.MainLoop().run()
+if ARGV.gtk: gtk.main()
+else: gobject.MainLoop().run()
 
