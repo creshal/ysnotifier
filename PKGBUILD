@@ -1,5 +1,5 @@
 pkgname=ysnotifier
-pkgver=0.4
+pkgver=0.5
 pkgrel=1
 pkgdesc="A minimal notification daemon for Gtk2."
 arch=('i686' 'x86_64')
@@ -10,7 +10,7 @@ makedepends=()
 provides=("notification-daemon")
 conflicts=("notification-daemon")
 source=("http://dev.yaki-syndicate.de/git/cgit.cgi/ysnotifier/plain/ysnotifier?id=${pkgver}")
-md5sums=('0ff6eb4b37ffadf82af1150c79ea2dce')
+md5sums=('ad96abac8c41c3308a1990b21645985f')
 build() {
   install -Dm755 "${srcdir}/$pkgname?id=${pkgver}" $pkgdir/usr/bin/$pkgname
 }

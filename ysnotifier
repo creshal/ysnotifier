@@ -7,7 +7,7 @@
 #
 # Test suite compliance:
 # test-action-icons:       0% Action icons not supported
-# test-basic:             67% No forced line breaks for overly long summaries
+# test-basic:            100% OK (long notifications are cut -- not strictly specification compliant, but acceptable in most cases)
 # test-default-action:   100% OK
 # test-error:            100% OK (since the test doesn't do anything but showing a notification)
 # test-image:             50% stock OK, URI not supported
@@ -23,10 +23,10 @@
 # test-size-change:        0% other notifications not adjusted for new size
 # test-transient:       (100%) Persistence not supported, therefore automatically transient
 # test-urgency:            0% Urgency not supported
-# test-xy                  0% Positions are always fixed
-# test-xy-actions:        50% Actions supported, positioning not
-# text-xy-stress:         50% Stress test doesn't fuck up anything, positions still fixed
-# total:                  61%
+# test-xy                100% Positions are always fixed
+# test-xy-actions:       100% Actions supported, positioning not
+# text-xy-stress:        100% Stress test doesn't fuck up anything, positions still fixed
+# total:                  73%
 #
 # © Samuel Vincent Creshal <samuel@creshal.de> 2011
 #
@@ -78,9 +78,11 @@ if ARGV.gtk:
 class GtkNotification (gtk.Window):
   def __init__ (self, daemon, app_name, id, icon, summary, body, actions, hints, argv):
     gtk.Window.__init__(self)
+    self.y = self.width = self.height = 0
     self.notifier = daemon
     self.argv = argv
     self.id = id
+    self.hints = hints
     self.timeout = gobject.timeout_add (daemon.timeout, self.do_destroy, 1)
     #why write readable code when you can have short code?
     for attr in ["resizable","decorated"]:
@@ -93,7 +95,9 @@ class GtkNotification (gtk.Window):
     self.evbox.add (self.hbox)
     self.add (self.evbox)
     self.evbox.connect ("button-release-event", self.do_destroy)
+    self.connect ("configure-event", self.automove)
     self.set_border_width (4)
+    self.set_wmclass (str(id),"ysnotifier")
     self.update (app_name, id, icon, summary, body, actions, hints, "initial")
 
   def do_destroy (self, reason, unused=None):
@@ -121,13 +125,15 @@ class GtkNotification (gtk.Window):
     else:
       icon = gtk.image_new_from_stock(gtk.STOCK_DIALOG_INFO,icon_size)
     title = gtk.Label ('<span size="xx-large">%s</span>' % summary)
-    body = gtk.Label (body)
+    content = gtk.Label (body)
     self.hbox = gtk.HBox(False)
     self.hbox.add (icon)
     vbox = gtk.VBox(True)
-    for label in [title, body]:
+    for label in [title, content]:
       vbox.pack_start (label)
       label.set_use_markup (True)
+    #content.set_line_wrap (True)
+    if len (body) > 80: content.set_max_width_chars (80) #the dreaded 80 char limit... it's going to haunt us forever, isn't it?
     self.hbox.pack_start (vbox, padding=8)
     for i in range(len(actions))[::2]:
       button = gtk.Button (actions[i+1])
@@ -141,24 +147,28 @@ class GtkNotification (gtk.Window):
   def action (self, widget, action):
     self.notifier.ActionInvoked (self.id, action)
 
-  def automove (self, widget=None, event=None, force=False):
+  def automove (self, widget=None, event=None, force=False,excluded=0,precedessor=None):
     """ Move window to the user-supplied position. Thanks, GTK, for not making it any easier."""
-    if not self.needsmove and type(force) is bool:
+    if not self.needsmove and type(force) is bool or self.id is excluded:
       return
     self.set_gravity(gtk.gdk.GRAVITY_SOUTH_EAST)
-    width, height = self.get_size()
+    width, height = (event.width, event.height) if event else self.get_size()
+    x,y = (event.x, event.y) if event else self.get_position()
     #I dare you to find an example of worse abuse of inline if
-    x, y = self.get_position()
-    x = 0 if self.argv.x == "left" else gtk.gdk.screen_width() - width if self.argv.x == "right" else int(self.argv.x)
+    x = self.hints["x"] if "x" in self.hints else (0 if self.argv.x == "left" else gtk.gdk.screen_width() - width if self.argv.x == "right" else int(self.argv.x))
     if self.needsmove is not "update": #recalc height only when not updating content alone
-      y = 0 if self.argv.y == "top" else gtk.gdk.screen_height() - height if self.argv.y == "bottom" else int(self.argv.y)
-      if y < 256 or self.argv.force_tile_down:
-        y += height * (force if type(force) is int else (len(self.notifier.notifications)-1))
-      else:
-        y -= height * (force if type(force) is int else (len(self.notifier.notifications)-1))
+      y = self.hints["y"] if "y" in self.hints else (0 if self.argv.y == "top" else gtk.gdk.screen_height() - height if self.argv.y == "bottom" else int(self.argv.y))
+      iop = None
+      if "y" not in self.hints and (y < 256 or self.argv.force_tile_down): iop = y.__add__
+      elif "y" not in self.hints: iop == y.__sub__
+      if iop and precedessor: y = iop (height + precedessor.y)
+      elif iop: y = iop (height * max((force if type(force) is int else (len(self.notifier.notifications)-1)) - self.notifier.absolute_notes, 0))
     self.move(x, y)
+    self.y, self.height = (y, height)
     self.needsmove = ""
 
+  def __str__(self):
+    return str((self.id, self.title, self.y, self.height))
 
 
 class YSNotifier (dbus.service.Object):
@@ -169,7 +179,8 @@ class YSNotifier (dbus.service.Object):
     self.max_id = 1 #spec doesn't think 0 is a valid id
     self.notifications = odict()
     self.argv = argv
-    self.timeout = 10000
+    self.timeout = argv.timeout
+    self.absolute_notes = 0
     dbus.service.Object.__init__(self, bus_name, "/org/freedesktop/Notifications")
 
   @dbus.service.method ("org.freedesktop.Notifications")
@@ -186,15 +197,25 @@ class YSNotifier (dbus.service.Object):
       assert (id > 0)
       self.notifications[id].update (app_name, id, icon, summary, body, actions, hints)
     except:
-      id = self.max_id
-      self.max_id +=1
+      id = self.max_id if not id else id
+      self.max_id = self.max_id +1 if id <= self.max_id else id+1
       if self.argv.gtk == True:
+        if "x" in hints:
+          self.absolute_notes += 1
         self.notifications[id] = GtkNotification (self, app_name, id, icon, summary, body, actions, hints, self.argv)
       elif not self.argv.quiet:
         print ("[%s]: %s" % (app_name, body if body else summary))
-    [self.notifications[note[0]].automove(force=note[1]) for note in zip(self.notifications,range(len(self.notifications)))]
+    #[self.notifications[note[0]].automove(force=note[1], excluded=id) for note in zip(self.notifications,range(len(self.notifications)))]
+    self.reposition_notes (id)
     return dbus.UInt32(id)
 
+  def reposition_notes (self, excluded):
+    last = None
+    for note in enumerate (self.notifications):
+      if "x" in self.notifications[note[1]].hints:
+        continue
+      self.notifications[note[1]].automove(force=note[0], precedessor=last, excluded=excluded)
+      last = self.notifications[note[1]]
 
   @dbus.service.method ("org.freedesktop.Notifications")
   def GetCapabilities (self):
@@ -209,12 +230,15 @@ class YSNotifier (dbus.service.Object):
 
   @dbus.service.method ("org.freedesktop.Notifications", out_signature="ssss")
   def GetServerInformation (self):
-    return ("YSNotifier", "The Yaki Syndicate", "0.4", "1.2")
+    return ("YSNotifier", "The Yaki Syndicate", "0.5", "1.2")
 
   @dbus.service.signal (dbus_interface="org.freedesktop.Notifications", signature="uu")
   def NotificationClosed (self, id, reason):
+    if "x" in self.notifications[int(id)].hints:
+      self.absolute_notes -= 1
     del(self.notifications[int(id)])
-    [self.notifications[note[0]].automove(force=note[1]) for note in zip(self.notifications,range(len(self.notifications)))]
+    #[self.notifications[note[0]].automove(force=note[1]) for note in zip(self.notifications,range(len(self.notifications)))]
+    self.reposition_notes(id)
     if self.argv.verbose:
       print ("Removing notification %s, reason: %s" % (id, ["Expired","User request","Client request","Undefined/internal"][reason]))
 
