@@ -10,7 +10,7 @@ makedepends=()
 provides=("notification-daemon")
 conflicts=("notification-daemon")
 source=("http://dev.yaki-syndicate.de/git/cgit.cgi/ysnotifier/plain/ysnotifier?id=${pkgver}")
-md5sums=('ad96abac8c41c3308a1990b21645985f')
+md5sums=('11719ad4c4e74f946c9bb4ec31a8fd3f')
 build() {
   install -Dm755 "${srcdir}/$pkgname?id=${pkgver}" $pkgdir/usr/bin/$pkgname
 }
