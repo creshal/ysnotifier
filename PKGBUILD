@@ -2,7 +2,7 @@ pkgname=ysnotifier
 pkgver=0.5
 pkgrel=1
 pkgdesc="A minimal notification daemon for Gtk2."
-arch=('i686' 'x86_64')
+arch=('any')
 url="http://dev.yaki-syndicate.de/"
 license=('GPL')
 depends=('dbus-python' 'pygtk' 'python2>=2.7')
